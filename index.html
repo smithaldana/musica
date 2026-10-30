@@ -1519,7 +1519,7 @@ function viewLibrary(){
   return h;
 }
 function viewLists(){
-  const pls = [...S.playlists.values()].sort((a, b) => b.updated - a.updated);
+  const all = [...S.playlists.values()].sort((a, b) => b.updated - a.updated), pls = all.filter(p => !p.shared), shared = all.filter(p => p.shared);
   const card = (k) => { const s = SMART[k], n = s.ids().length; return `<button class="smart-card" data-act="open-pl" data-pl="smart:${k}" type="button">${icon(s.ic)}<span><strong>${s.name}</strong><small>${plural(n, 'pista', 'pistas')}</small></span></button>`; };
   let h = `<div class="vh"><span class="eyebrow">${plural(pls.length, 'lista tuya', 'listas tuyas')}</span><h1>Listas</h1></div>
   <div class="actions"><button class="btn btn-rec" data-act="new-pl" type="button">${icon('plus')}Nueva lista</button><button class="btn" data-act="import-pack" type="button">${icon('inbox')}Importar lista</button></div>
@@ -1527,18 +1527,25 @@ function viewLists(){
   <h2 class="sec">Tus listas</h2>`;
   if (!pls.length) h += `<p class="hint">Aún no tienes listas. Crea una aquí o usa el menú ${icon('more')} de cualquier canción y elige «Añadir a una lista».</p>`;
   else h += `<ul class="rows">${pls.map(p => { const items = p.items.filter(id => S.tracks.has(id)); return `<li class="row"><button class="row-main" data-act="open-pl" data-pl="${p.id}" type="button">${mosaic(items)}<span class="meta"><span class="t">${esc(p.name)}</span><span class="s">${plural(items.length, 'pista', 'pistas')} · ${fmtTotal(durOf(items))}</span></span></button><button class="more" data-act="pl-menu" data-pl="${p.id}" type="button" aria-label="Opciones de ${esc(p.name)}">${icon('more')}</button></li>`; }).join('')}</ul>`;
+  if (shared.length){
+    const owners = [...new Set(shared.map(p => p.shared))];
+    for (const o of owners){
+      const ps = shared.filter(p => p.shared === o);
+      h += `<h2 class="sec">Compartidas contigo <span class="src">· de ${esc(who(o))}</span></h2><ul class="rows">${ps.map(p => { const items = p.items.filter(id => S.tracks.has(id)); return `<li class="row"><button class="row-main" data-act="open-pl" data-pl="${esc(p.id)}" type="button">${mosaic(items)}<span class="meta"><span class="t">${esc(p.name)}</span><span class="s">${plural(items.length, 'pista', 'pistas')} · ${fmtTotal(durOf(items))}</span></span></button></li>`; }).join('')}</ul>`;
+    }
+  }
   return h;
 }
 function viewPlaylist(){
   const p = getPl(S.plId); if (!p){ S.view = 'lists'; return viewLists(); }
-  const items = p.items.filter(id => S.tracks.has(id));
+  const items = p.items.filter(id => S.tracks.has(id)), ro = !!(p.smart || p.shared);
   S.ctx = { ids: items, source: { kind: 'playlist', id: p.id, label: p.name } };
   let h = `<button class="back" data-act="${p.fromLib ? 'back-lib' : 'back-lists'}" type="button">${icon('back')}${p.fromLib ? 'Biblioteca' : 'Listas'}</button>
-  <div class="pl-head">${mosaic(items, 'big')}<div class="pl-info"><span class="eyebrow">${esc(p.kindLabel || (p.smart ? 'Lista automática' : 'Lista'))}</span><h1>${esc(p.name)}</h1><span class="s">${plural(items.length, 'pista', 'pistas')} · ${fmtTotal(durOf(items))}</span></div></div>
-  <div class="actions">${items.length ? `<button class="btn btn-rec" data-act="play-ctx" type="button">${icon('play')}Reproducir</button><button class="btn" data-act="shuffle-ctx" type="button">${icon('shuffle')}Aleatorio</button><button class="btn" data-act="share-pl" type="button">${icon('share')}Compartir</button>${S.settings.driveOn && !p.smart && items.some(id => S.tracks.get(id)?.driveId) ? `<button class="btn${offlinePls().has(p.id) ? ' on' : ''}" data-act="pl-offline" type="button" aria-pressed="${offlinePls().has(p.id)}">${icon('download')}${offlinePls().has(p.id) ? 'Sin conexión ✓' : 'Sin conexión'}</button>` : ''}` : ''}${p.smart ? '' : `<button class="btn" data-act="pl-add" type="button">${icon('plus')}Añadir canciones</button><button class="icon-btn" data-act="pl-menu" data-pl="${p.id}" type="button" aria-label="Opciones de la lista">${icon('more')}</button>`}</div>`;
-  if (!items.length) h += `<p class="hint">${p.smart ? p.empty : 'Esta lista está vacía. Pulsa «Añadir canciones» para llenarla.'}</p>`;
-  else if (!p.smart && items.length > 1) h += `<p class="hint" style="margin:0 0 6px;font-size:13px">Arrastra ${icon('drag')} para cambiar el orden.</p>`;
-  h += `<ul class="rows" data-list="ctx"${p.smart ? '' : ' data-sortable="pl"'}>${items.map((id, i) => rowHTML(S.tracks.get(id), { index: i, handle: !p.smart, wide: true })).join('')}</ul>`;
+  <div class="pl-head">${mosaic(items, 'big')}<div class="pl-info"><span class="eyebrow">${esc(p.kindLabel || (p.shared ? `Lista de ${who(p.shared)} · solo lectura` : p.smart ? 'Lista automática' : 'Lista'))}</span><h1>${esc(p.name)}</h1><span class="s">${plural(items.length, 'pista', 'pistas')} · ${fmtTotal(durOf(items))}</span></div></div>
+  <div class="actions">${items.length ? `<button class="btn btn-rec" data-act="play-ctx" type="button">${icon('play')}Reproducir</button><button class="btn" data-act="shuffle-ctx" type="button">${icon('shuffle')}Aleatorio</button><button class="btn" data-act="share-pl" type="button">${icon('share')}Compartir</button>${S.settings.driveOn && (!p.smart || p.shared) && items.some(id => S.tracks.get(id)?.driveId) ? `<button class="btn${offlinePls().has(p.id) ? ' on' : ''}" data-act="pl-offline" type="button" aria-pressed="${offlinePls().has(p.id)}">${icon('download')}${offlinePls().has(p.id) ? 'Sin conexión ✓' : 'Sin conexión'}</button>` : ''}` : ''}${p.shared ? `<button class="btn" data-act="pl-copy" type="button">${icon('addlist')}Copiar a mis listas</button>` : ''}${ro ? '' : `<button class="btn" data-act="pl-add" type="button">${icon('plus')}Añadir canciones</button><button class="icon-btn" data-act="pl-menu" data-pl="${p.id}" type="button" aria-label="Opciones de la lista">${icon('more')}</button>`}</div>`;
+  if (!items.length) h += `<p class="hint">${p.smart ? p.empty : p.shared ? 'Esta lista compartida está vacía o sus canciones aún no han llegado. Pulsa Sincronizar en la Biblioteca.' : 'Esta lista está vacía. Pulsa «Añadir canciones» para llenarla.'}</p>`;
+  else if (!ro && items.length > 1) h += `<p class="hint" style="margin:0 0 6px;font-size:13px">Arrastra ${icon('drag')} para cambiar el orden.</p>`;
+  h += `<ul class="rows" data-list="ctx"${ro ? '' : ' data-sortable="pl"'}>${items.map((id, i) => rowHTML(S.tracks.get(id), { index: i, handle: !ro, wide: true })).join('')}</ul>`;
   return h;
 }
 function viewQueue(){
@@ -2008,7 +2015,7 @@ function trackMenu(id, { plId, qi } = {}){
     ['edit', 'edit', 'Editar información'],
     ...(t.driveId ? (t.cloud ? [['dl', 'download', 'Descargar en este dispositivo']] : [['undl', 'cloud', `Quitar la descarga (libera ${fmtBytes(t.size || 0)})`]]) : []),
     ...(t.kind === 'video' && !t.demo && !t.cloud ? [['to-audio', 'headphones', `Guardar solo el audio (ahorra ~${fmtBytes(Math.max(0, (t.size || 0) - estAudioBytes(t)))})`]] : []),
-    ...(plId && !plId.startsWith('smart:') ? [['rm-pl', 'x', 'Quitar de esta lista']] : []),
+    ...(plId && !plId.startsWith('smart:') && !S.playlists.get(plId)?.shared ? [['rm-pl', 'x', 'Quitar de esta lista']] : []),
     ...(qi != null && qi !== S.index ? [['rm-q', 'x', 'Quitar de la cola']] : []),
     ['delete', 'trash', 'Eliminar del dispositivo', 'danger'],
   ];
@@ -2045,7 +2052,7 @@ function nameSheet({ title, value = '', ok, onSave }){
 }
 function addToPlaylistSheet(ids){
   const body = () => {
-    const pls = [...S.playlists.values()].sort((a, b) => b.updated - a.updated);
+    const pls = [...S.playlists.values()].filter(p => !p.shared).sort((a, b) => b.updated - a.updated);
     return `<form class="newpl" id="newpl"><input type="text" id="newpl-name" placeholder="Nombre de una lista nueva" maxlength="80" autocomplete="off" aria-label="Nombre de una lista nueva"><button class="btn btn-rec" type="submit">Crear</button></form>`
       + (pls.length ? `<ul class="menu">${pls.map(p => { const has = ids.every(id => p.items.includes(id)); return `<li><button data-pl="${p.id}" type="button" aria-pressed="${has}">${mosaic(p.items, 'sm')}<span class="grow">${esc(p.name)}<small>${plural(p.items.length, 'pista', 'pistas')}</small></span>${has ? icon('check', 'ok') : ''}</button></li>`; }).join('')}</ul>` : `<p class="hint">Escribe un nombre para crear tu primera lista.</p>`);
   };
@@ -2170,14 +2177,15 @@ async function importBackup(file){
 
 /* ───────── Google Drive: misma música y listas en todos tus dispositivos ───────── */
 const GOOGLE_CLIENT_ID = '1060006641508-4p9rh7m0hgu62pe95n3mcmvbvfbb9hj8.apps.googleusercontent.com';
-const G_SCOPE = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file';
+const G_SCOPE = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata';
+const MINE_FILE = 'pletina-mis-listas.json';
 const LISTS_FILE = 'pletina-listas.json';
 const MEDIA_RE = /\.(mp3|m4a|aac|ogg|oga|opus|flac|wav|weba|mp4|m4v|webm|mov)$/i;
-const GD = { token: null, exp: 0, folderId: null, folderName: '', listsId: null, listsRO: false, busy: false, pushT: 0, merging: false, created: false };
+const GD = { scope: '', mineId: null, folderMine: false, listsMine: false, token: null, exp: 0, folderId: null, folderName: '', listsId: null, listsRO: false, busy: false, pushT: 0, merging: false, created: false };
 const clientId = () => GOOGLE_CLIENT_ID || S.settings.driveClientId || '';
-const tokValid = () => !!GD.token && GD.exp > Date.now() + 60000;
-function loadTok(){ try { const j = JSON.parse(localStorage.getItem('pletina-gtok') || 'null'); if (j && j.exp > Date.now() + 60000){ GD.token = j.token; GD.exp = j.exp; DB.put('meta', j, 'gtok').catch(() => {}); } } catch {} }
-function saveTok(){ try { GD.token ? localStorage.setItem('pletina-gtok', JSON.stringify({ token: GD.token, exp: GD.exp })) : localStorage.removeItem('pletina-gtok'); } catch {} (GD.token ? DB.put('meta', { token: GD.token, exp: GD.exp }, 'gtok') : DB.del('meta', 'gtok')).catch(() => {}); }
+const tokValid = () => !!GD.token && GD.exp > Date.now() + 60000 && /drive\.appdata/.test(GD.scope || '');
+function loadTok(){ try { const j = JSON.parse(localStorage.getItem('pletina-gtok') || 'null'); if (j && j.exp > Date.now() + 60000){ GD.token = j.token; GD.exp = j.exp; GD.scope = j.scope || ''; DB.put('meta', j, 'gtok').catch(() => {}); } } catch {} }
+function saveTok(){ try { GD.token ? localStorage.setItem('pletina-gtok', JSON.stringify({ token: GD.token, exp: GD.exp, scope: GD.scope })) : localStorage.removeItem('pletina-gtok'); } catch {} (GD.token ? DB.put('meta', { token: GD.token, exp: GD.exp }, 'gtok') : DB.del('meta', 'gtok')).catch(() => {}); }
 let gisP = null;
 function loadGIS(){
   if (window.google?.accounts?.oauth2) return Promise.resolve();
@@ -2189,7 +2197,7 @@ function getToken(interactive){
   if (!clientId()) return Promise.reject(new Error('falta el ID de cliente de Google.'));
   return loadGIS().then(() => new Promise((res, rej) => {
     const tc = google.accounts.oauth2.initTokenClient({ client_id: clientId(), scope: G_SCOPE,
-      callback: r => { if (r.error){ rej(new Error(r.error_description || r.error)); return; } GD.token = r.access_token; GD.exp = Date.now() + (+r.expires_in || 3600) * 1000; saveTok(); res(GD.token); },
+      callback: r => { if (r.error){ rej(new Error(r.error_description || r.error)); return; } GD.scope = r.scope || G_SCOPE; if (!/drive\.appdata/.test(GD.scope) || !/drive\.readonly/.test(GD.scope)){ rej(new Error('hay que aceptar todos los permisos que pide Pletina para sincronizar.')); return; } GD.token = r.access_token; GD.exp = Date.now() + (+r.expires_in || 3600) * 1000; saveTok(); res(GD.token); },
       error_callback: e => rej(new Error(e?.type === 'popup_closed' ? 'cerraste la ventana de Google antes de terminar.' : e?.type === 'popup_failed_to_open' ? 'el navegador bloqueó la ventana de Google.' : (e?.message || 'no se pudo conectar con Google.'))) });
     tc.requestAccessToken({ prompt: S.settings.driveEmail ? '' : 'consent', login_hint: S.settings.driveEmail || undefined });
   }));
@@ -2215,10 +2223,10 @@ async function findFolder(){
   const fs = await gList(`name='${gq(name)}' and mimeType='application/vnd.google-apps.folder' and trashed=false`, 'id,name,ownedByMe,modifiedTime');
   if (fs.length){
     fs.sort((a, b) => (+!!b.ownedByMe - +!!a.ownedByMe) || (Date.parse(b.modifiedTime) - Date.parse(a.modifiedTime)));
-    GD.folderId = fs[0].id; GD.folderName = fs[0].name; GD.created = false; return;
+    GD.folderId = fs[0].id; GD.folderName = fs[0].name; GD.folderMine = !!fs[0].ownedByMe; GD.created = false; return;
   }
   const r = await gapi('files?fields=id,name&supportsAllDrives=true', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder' }) });
-  const f = await r.json(); GD.folderId = f.id; GD.folderName = f.name; GD.created = true;
+  const f = await r.json(); GD.folderId = f.id; GD.folderName = f.name; GD.folderMine = true; GD.created = true;
 }
 async function listMedia(){
   const out = [], queue = [{ id: GD.folderId, path: [] }], seen = new Set();
@@ -2241,8 +2249,8 @@ async function driveDownload(f){
 }
 function localDoc(){
   return {
-    app: 'pletina', kind: 'sync', version: 1, updated: Date.now(),
-    playlists: [...S.playlists.values()].map(p => ({ id: p.id, name: p.name, created: p.created || 0, updated: p.updated || 0, items: p.items.map(id => S.tracks.get(id)?.driveId).filter(Boolean) })),
+    app: 'pletina', kind: 'sync', version: 2, updated: Date.now(), owner: S.settings.driveEmail || '',
+    playlists: [...S.playlists.values()].filter(p => !p.shared).map(p => ({ id: p.id, name: p.name, created: p.created || 0, updated: p.updated || 0, items: p.items.map(id => S.tracks.get(id)?.driveId).filter(Boolean) })),
     tombs: S.tombs || [],
     tracks: Object.fromEntries([...S.tracks.values()].filter(t => t.driveId && t.metaT).map(t => [t.driveId, { title: t.title, artist: t.artist, album: t.album, fav: !!t.fav, t: t.metaT }])),
   };
@@ -2270,29 +2278,59 @@ async function mergeDoc(doc){
     await DB.put('meta', S.tombs, 'tombs');
   } finally { GD.merging = false; }
 }
-async function pushDoc(){
-  const json = JSON.stringify(localDoc());
+async function pushFile(fileId, name, parent, json){
+  if (fileId){ await gapi(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: json }); return fileId; }
+  const b = 'pletina' + Date.now();
+  const body = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [parent], mimeType: 'application/json' })}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${json}\r\n--${b}--`;
+  const r = await gapi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
+  return (await r.json()).id;
+}
+/* tus listas, favoritas y cambios: en el espacio privado de la app en TU Drive (nadie más lo ve) */
+async function readMine(){
+  if (!GD.mineId){ const r = await (await gapi(`files?spaces=appDataFolder&q=${encodeURIComponent(`name='${MINE_FILE}' and trashed=false`)}&fields=files(id)`)).json(); GD.mineId = r.files?.[0]?.id || null; }
+  if (!GD.mineId) return;
+  try { const doc = await (await gapi(`files/${GD.mineId}?alt=media`)).json(); if (doc?.app === 'pletina') await mergeDoc(doc); } catch (e) { if (e.reauth) throw e; if (e.status === 404) GD.mineId = null; console.warn('mis listas', e); }
+}
+async function pushMine(){ GD.mineId = await pushFile(GD.mineId, MINE_FILE, 'appDataFolder', JSON.stringify(localDoc())); }
+/* listas publicadas en la carpeta compartida: las del dueño de la carpeta */
+const who = email => String(email || '').split('@')[0] || 'otra persona';
+async function applyShared(doc, owner){
+  GD.merging = true;
   try {
-    if (GD.listsId) await gapi(`https://www.googleapis.com/upload/drive/v3/files/${GD.listsId}?uploadType=media&supportsAllDrives=true`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: json });
-    else {
-      const b = 'pletina' + Date.now();
-      const body = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: LISTS_FILE, parents: [GD.folderId], mimeType: 'application/json' })}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${json}\r\n--${b}--`;
-      const r = await gapi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
-      GD.listsId = (await r.json()).id;
+    const byDrive = new Map([...S.tracks.values()].filter(t => t.driveId).map(t => [t.driveId, t]));
+    const keep = new Set();
+    for (const rp of doc.playlists || []){
+      const id = 'sh:' + rp.id; keep.add(id);
+      const p = { id, name: rp.name || 'Lista', shared: owner, created: rp.created || 0, updated: rp.updated || 0, items: (rp.items || []).map(d => byDrive.get(d)?.id).filter(Boolean) };
+      S.playlists.set(id, p); await DB.put('playlists', p);
     }
-    GD.listsRO = false;
-  } catch (e) { if (e.status === 403 || e.status === 404){ GD.listsRO = true; } else throw e; }
+    for (const p of [...S.playlists.values()]) if (p.shared === owner && !keep.has(p.id)){ S.playlists.delete(p.id); await DB.del('playlists', p.id); }
+  } finally { GD.merging = false; }
 }
-async function readDoc(){
-  if (!GD.listsId){ const r = await gList(`'${GD.folderId}' in parents and name='${LISTS_FILE}' and trashed=false`, 'id'); GD.listsId = r[0]?.id || null; }
+async function readFolderDoc(){
+  const r = await gList(`'${GD.folderId}' in parents and name='${LISTS_FILE}' and trashed=false`, 'id,ownedByMe');
+  GD.listsId = r[0]?.id || null; GD.listsMine = !!r[0]?.ownedByMe;
   if (!GD.listsId) return;
-  try { const doc = await (await gapi(`files/${GD.listsId}?alt=media&supportsAllDrives=true`)).json(); if (doc?.app === 'pletina') await mergeDoc(doc); } catch (e) { if (e.reauth) throw e; console.warn('listas drive', e); }
+  try {
+    const doc = await (await gapi(`files/${GD.listsId}?alt=media&supportsAllDrives=true`)).json();
+    if (doc?.app !== 'pletina') return;
+    const me = S.settings.driveEmail || '';
+    if (GD.listsMine || (doc.owner && doc.owner === me)) await mergeDoc(doc);
+    else await applyShared(doc, doc.owner || 'compartida');
+  } catch (e) { if (e.reauth) throw e; console.warn('listas compartidas', e); }
 }
+async function pushFolderDoc(){
+  GD.listsRO = !GD.folderMine;
+  if (!GD.folderMine || (GD.listsId && !GD.listsMine)) return;
+  try { GD.listsId = await pushFile(GD.listsId, LISTS_FILE, GD.folderId, JSON.stringify(localDoc())); GD.listsMine = true; GD.listsRO = false; }
+  catch (e) { if (e.status === 403 || e.status === 404) GD.listsRO = true; else throw e; }
+}
+async function syncLists(){ await readMine(); await readFolderDoc(); await pushMine(); await pushFolderDoc(); }
 function driveStatus(){ const el = $('#gd-status'); if (el) el.textContent = driveStatusText(); $$('[data-act="gd-sync"]').forEach(b => { b.disabled = GD.busy; b.innerHTML = `${icon('cloud')}${GD.busy ? 'Sincronizando…' : 'Sincronizar'}`; }); }
 function relTime(ts){ if (!ts) return 'nunca'; const s = (Date.now() - ts) / 1000; if (s < 60) return 'hace un momento'; if (s < 3600) return `hace ${Math.round(s / 60)} min`; if (s < 86400) return `hace ${Math.round(s / 3600)} h`; return new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }); }
 function driveStatusText(){
   if (GD.busy) return 'Sincronizando…';
-  return `Carpeta «${GD.folderName || S.settings.driveFolder || 'Pletina'}» · última sincronización: ${relTime(S.settings.driveLast)}${GD.listsRO ? ' · listas en solo lectura' : ''}`;
+  return `Carpeta «${GD.folderName || S.settings.driveFolder || 'Pletina'}» · última sincronización: ${relTime(S.settings.driveLast)}${GD.listsRO ? ` · carpeta compartida por otra persona` : ''}`;
 }
 async function syncDrive({ interactive = false, media = true, quiet = false, first = false } = {}){
   if (GD.busy) return;
@@ -2332,8 +2370,7 @@ async function syncDrive({ interactive = false, media = true, quiet = false, fir
       const gone = [...S.tracks.values()].filter(t => t.driveId && !present.has(t.driveId)).map(t => t.id);
       if (gone.length){ await deleteTracks(gone); removed = gone.length; }
     }
-    await readDoc();
-    await pushDoc();
+    await syncLists();
     S.settings.driveLast = Date.now(); saveSettings();
     ensureOffline();
     if (!quiet || added || removed){
@@ -2361,7 +2398,7 @@ function listsChanged(){
   clearTimeout(GD.pushT);
   GD.pushT = setTimeout(async () => {
     if (!tokValid() || GD.busy || !GD.folderId) return;
-    try { GD.busy = true; await readDoc(); await pushDoc(); S.settings.driveLast = Date.now(); saveSettings(); } catch (e) { console.warn('drive push', e); } finally { GD.busy = false; driveStatus(); }
+    try { GD.busy = true; await syncLists(); S.settings.driveLast = Date.now(); saveSettings(); } catch (e) { console.warn('drive push', e); } finally { GD.busy = false; driveStatus(); }
   }, 4000);
 }
 { const _put = DB.put.bind(DB), _del = DB.del.bind(DB);
@@ -2386,7 +2423,7 @@ async function uploadLocal(){
       const j = await r.json(); t.driveId = j.id; t.driveMd5 = j.md5Checksum || ''; await saveTrack(t); ok++;
     }
     tt.kill(); toast(`Drive: ${plural(ok, 'pista subida', 'pistas subidas')}. Ya aparecen en tus otros dispositivos al sincronizar.`, { ms: 5000 });
-    await readDoc(); await pushDoc();
+    await syncLists();
   } catch (e) {
     tt.kill(); toast(e.status === 403 ? 'Drive no me deja escribir en esa carpeta. Usa una carpeta creada por Pletina.' : 'Drive: ' + (e.message || e), { ms: 7000 });
   } finally { GD.busy = false; updateCounter(); driveStatus(); if (S.view === 'settings') render(); }
@@ -2842,6 +2879,7 @@ function bindUI(){
       case 'remove-demos': removeDemos(); break;
       case 'import-pack': $('#pack-in').click(); break;
       case 'share-pl': shareSheet(S.plId); break;
+      case 'pl-copy': { const p = getPl(S.plId); if (!p) break; const np = await createPlaylist(p.name, p.items.filter(id => S.tracks.has(id))); toast(`Copiada a tus listas como «${np.name}». Esa copia ya es tuya: puedes cambiarla.`); openPlaylist(np.id); break; }
       case 'pl-offline': setPlOffline(S.plId, !offlinePls().has(S.plId)); break;
       case 'free-space': freeSpace(); break;
       case 'new-pl': nameSheet({ title: 'Nueva lista', ok: 'Crear lista', onSave: async v => { const p = await createPlaylist(v); openPlaylist(p.id); } }); break;
