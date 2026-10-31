@@ -3040,6 +3040,7 @@ function bindUI(){
   $('#ov-next').addEventListener('click', () => { next(); showOv(true); });
   $('#ov-play').addEventListener('click', () => { buzz(10); togglePlay(); });
   $('#ov-full').addEventListener('click', toggleFull);
+  $$('#ov button, #ov-bar, .ov-vol').forEach(el => el.addEventListener('click', e => e.stopPropagation()));
   $('#ov-theater').addEventListener('click', toggleTheater);
   $('#ov-pip').innerHTML = icon('pip');
   $('#ov-pip').addEventListener('click', togglePiP);
@@ -3073,7 +3074,7 @@ function bindUI(){
   $('#ov-volr').addEventListener('input', e => { setVolume(+e.target.value); showOv(true); });
   stage.addEventListener('click', e => {
     if (!listMode()){ if (e.target === video) togglePlay(); return; }
-    if (e.target.closest('button,.ov-bar,.ov-vol')) return;
+    if (e.composedPath().some(n => n instanceof Element && n.matches('button,.ov-bar,.ov-vol'))) return;
     if (e.pointerType === 'mouse'){
       clearTimeout(tapT);
       if (e.detail >= 2){ toggleFull(); return; }
