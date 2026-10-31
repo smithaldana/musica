@@ -1176,12 +1176,45 @@ function startTail(el, srcObj, secs, newT){
   }, 50);
 }
 const otherAudio = () => engine === audio ? audio2 : audio;
-async function loadTrack(id, { autoplay = true, at = 0, xfade = 0 } = {}){
+function playableNow(t){ return !!t && (!t.cloud || canStream()); }
+function nextPlayable(from){
+  const n = S.queue.length;
+  for (let k = 1; k <= n; k++){
+    let j = from + k;
+    if (j >= n){ if (S.repeat === 'all') j -= n; else return -1; }
+    if (j === from) return -1;
+    if (playableNow(S.tracks.get(S.queue[j]))) return j;
+  }
+  return -1;
+}
+const toastsOnce = new Map();
+function toastOnce(key, msg, opts = {}){
+  const prev = toastsOnce.get(key);
+  if (prev && prev.el.isConnected){ prev.set(msg); return prev; }
+  const tt = toast(msg, opts); toastsOnce.set(key, tt); return tt;
+}
+async function loadTrack(id, { autoplay = true, at = 0, xfade = 0, auto = false, retried = false } = {}){
   const t = S.tracks.get(id); if (!t) return;
   const token = ++loadToken;
   const srcObj = await sourceFor(t);
   if (token !== loadToken){ releaseSrc(srcObj); return; }
-  if (!srcObj){ toast(navigator.onLine === false ? `«${t.title}» no está descargada y no hay conexión.` : `No encuentro el archivo de «${t.title}».`); if (autoplay && S.queue.length > 1 && !S.skipGuard){ S.skipGuard = true; setTimeout(() => { S.skipGuard = false; next(true); }, 600); } return; }
+  if (!srcObj){
+    const online = navigator.onLine !== false;
+    /* en la nube y la sesión de Google caducó: si fue un toque tuyo, se reconecta en ese mismo toque */
+    if (t.cloud && online && S.settings.driveOn && !tokValid() && !retried && !auto && navigator.userActivation?.isActive){
+      try { await getToken(true); if (token === loadToken) return loadTrack(id, { autoplay, at, xfade, auto, retried: true }); return; }
+      catch (e) { toastOnce('reauth', 'No se pudo reconectar con Google: ' + (e?.message || e)); return; }
+    }
+    /* salto automático: pasa a la siguiente que pueda sonar, sin llenar la pantalla de avisos */
+    if (auto && autoplay && S.queue.length > 1){
+      const j = nextPlayable(S.index);
+      if (j >= 0){ S.index = j; return loadTrack(S.queue[j], { autoplay, auto: true }); }
+    }
+    if (t.cloud) toastOnce('cloud', online ? (S.settings.driveOn ? `«${t.title}» está en Drive y hay que reconectar con Google.` : `«${t.title}» está en Drive: conecta Google Drive en Ajustes.`) : `«${t.title}» no está descargada y no hay conexión.`, online && S.settings.driveOn ? { action: 'Reconectar', onAction: () => getToken(true).then(() => loadTrack(id, { autoplay: true, retried: true })).catch(e => toast('No se pudo reconectar: ' + (e?.message || e))), ms: 8000 } : {});
+    else toastOnce('missing', `No encuentro el archivo de «${t.title}».`);
+    if (auto){ S.wantPlay = false; updatePlayState(); }
+    return;
+  }
   const prev = { el: engine, src: S.src, id: S.currentId, index: S.index };
   const useV = wantsVideo(t);
   let target;
@@ -1272,8 +1305,8 @@ function crossfadeNext(){
   extendMix();
   let i = S.index + 1;
   if (i >= S.queue.length){ if (S.repeat === 'all') i = 0; else return; }
-  const nt = S.tracks.get(S.queue[i]); if (!nt || wantsVideo(nt)) return;
-  countPlay(); S.index = i; loadTrack(S.queue[i], { autoplay: true, xfade: xf });
+  const nt = S.tracks.get(S.queue[i]); if (!nt || wantsVideo(nt) || !playableNow(nt)) return;
+  countPlay(); S.index = i; loadTrack(S.queue[i], { autoplay: true, xfade: xf, auto: true });
 }
 async function play(){
   if (!S.currentId){
@@ -1303,7 +1336,7 @@ function next(auto = false){
     else if (extendMix(true)) i = S.index + 1;
     else { if (auto){ S.wantPlay = false; try { engine.currentTime = 0; } catch {} updatePlayState(); } else toast('Fin de la cola.'); return; }
   }
-  S.index = i; loadTrack(S.queue[i], { autoplay: auto || S.wantPlay });
+  S.index = i; loadTrack(S.queue[i], { autoplay: auto || S.wantPlay, auto });
 }
 function prev(){
   if (position() > 3 || (S.index <= 0 && S.repeat !== 'all')){ seekTo(0); return; }
@@ -2458,7 +2491,6 @@ const unavailable = t => !!t?.cloud && !canStream();
 async function streamURL(t){
   if (!t.driveId) return null;
   if (!canStream()){
-    if (navigator.onLine !== false && S.settings.driveOn) toast(`«${t.title}» está en Drive y la sesión de Google caducó.`, { action: 'Reconectar', onAction: () => syncDrive({ interactive: true, media: false }), ms: 8000 });
     return null;
   }
   if (swReady()) return `stream/${encodeURIComponent(t.driveId)}?s=${t.size || 0}&m=${encodeURIComponent(t.mime || '')}`;
@@ -2526,7 +2558,13 @@ let preBusy = false;
 async function prefetchAhead(){
   if (preBusy || !canStream()) return; preBusy = true;
   try {
-    for (let k = 1; k <= 2; k++){ const t = S.tracks.get(S.queue[S.index + k]); if (t && t.cloud && t.kind === 'audio' && t.size < 60e6) await downloadTrack(t, 'auto').catch(() => {}); }
+    const c = navigator.connection || {}, frugal = !!c.saveData || c.type === 'cellular';
+    for (let k = 1; k <= 4; k++){
+      const t = S.tracks.get(S.queue[S.index + k]); if (!t || !t.cloud) continue;
+      if (t.size > (t.kind === 'video' ? (frugal ? 0 : 200e6) : 80e6)) continue;
+      if (!canStream()) break;
+      await downloadTrack(t, 'auto').catch(() => {});
+    }
   } finally { preBusy = false; }
 }
 const CACHE_CAP = 1.5e9;
@@ -3081,7 +3119,7 @@ function bindUI(){
     });
     el.addEventListener('error', e => {
       if (e.target !== engine || !engine.getAttribute('src')) return;
-      const t = cur(); toast(`No se pudo reproducir «${t?.title || 'esta pista'}». Paso a la siguiente.`);
+      const t = cur(); toastOnce('playerr', `No se pudo reproducir «${t?.title || 'esta pista'}». Paso a la siguiente.`);
       S.wantPlay = true; setTimeout(() => next(true), 900);
     });
   }
