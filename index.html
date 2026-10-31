@@ -173,6 +173,16 @@ body.is-playing .eq i{animation:eq .8s ease-in-out infinite alternate}
 .switch i{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:linear-gradient(var(--key-top),var(--key-bot));box-shadow:0 1px 2px rgba(0,0,0,.35);transition:transform .18s}
 .switch[aria-checked="true"]{background:var(--rec)}
 .switch[aria-checked="true"] i{transform:translateX(20px)}
+.set-row.col > *{min-width:0;max-width:100%}
+.choices{display:grid;gap:8px}
+.choice{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:transparent;text-align:left}
+.choice .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.choice strong{font-size:14.5px}
+.choice small{color:var(--muted);font-size:12.5px;line-height:1.35}
+.choice .dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);flex:0 0 auto;display:grid;place-items:center}
+.choice[aria-checked="true"]{border-color:var(--rec);background:color-mix(in srgb,var(--rec) 8%,transparent)}
+.choice[aria-checked="true"] .dot{border-color:var(--rec)}
+.choice[aria-checked="true"] .dot::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--rec)}
 .foot{color:var(--muted);font-size:13px;text-align:center;margin:8px 0 0}
 
 /* mini reproductor */
@@ -2520,7 +2530,7 @@ function driveSettingsHTML(){
     const localOnly = [...S.tracks.values()].filter(t => !t.driveId && !t.demo).length;
     rows = `<div class="set-row"><div class="lbl">${esc(S.settings.driveEmail || 'Conectado')}<small id="gd-status">${esc(driveStatusText())}</small></div><button class="btn btn-rec" data-act="gd-sync" type="button"${GD.busy ? ' disabled' : ''}>${icon('cloud')}${GD.busy ? 'Sincronizando…' : 'Sincronizar'}</button></div>`
       + (localOnly ? `<div class="set-row"><div class="lbl">${plural(localOnly, 'pista solo en este dispositivo', 'pistas solo en este dispositivo')}<small>Súbelas a la carpeta para tenerlas también en tus otros dispositivos.</small></div><button class="btn" data-act="gd-upload" type="button">${icon('upload')}Subir a Drive</button></div>` : '')
-      + `<div class="set-row col"><div class="lbl">Descargar en este dispositivo<small>Lo demás suena desde Drive cuando hay conexión, sin ocupar espacio. Las siguientes canciones de la cola se guardan solas por si te quedas sin cobertura.</small></div><div class="seg" role="group" aria-label="Qué descargar">${[['marked', 'Favoritas y listas marcadas'], ['lists', 'Solo listas marcadas'], ['all', 'Todo']].map(([k, l]) => `<button data-act="set-autodl" data-v="${k}" type="button" aria-pressed="${(S.settings.autoDl === 'none' ? 'marked' : S.settings.autoDl) === k}">${l}</button>`).join('')}</div></div>`
+      + `<div class="set-row col"><div class="lbl">Descargar en este dispositivo<small>Lo que no se descarga suena desde Drive cuando hay conexión. Las siguientes canciones de la cola se guardan solas por si te quedas sin cobertura.</small></div><div class="choices" role="radiogroup" aria-label="Qué descargar">${[['marked', 'Favoritas y listas marcadas', 'Lo demás suena desde Drive. Ocupa poco.'], ['lists', 'Solo listas marcadas', 'Solo las listas con «Sin conexión».'], ['all', 'Todo', 'Toda la música en el móvil: suena siempre, aunque caduque la sesión de Google. Ocupa más.']].map(([k, l, d]) => { const on = (S.settings.autoDl === 'none' ? 'marked' : S.settings.autoDl) === k; return `<button class="choice" role="radio" aria-checked="${on}" data-act="set-autodl" data-v="${k}" type="button"><span class="dot"></span><span class="grow"><strong>${l}</strong><small>${d}</small></span></button>`; }).join('')}</div></div>`
       + `<div class="set-row"><div class="lbl">Liberar espacio<small>Quita del móvil lo que ya está en Drive, salvo favoritas y listas «Sin conexión».</small></div><button class="btn" data-act="free-space" type="button">${icon('cloud')}Liberar</button></div>`
       + `<div class="set-row"><div class="lbl">Desconectar<small>Tu música se queda en este dispositivo; deja de sincronizarse.</small></div><button class="btn danger" data-act="gd-disconnect" type="button">Desconectar</button></div>`;
   }
@@ -2979,7 +2989,7 @@ function bindUI(){
       case 'export': exportBackup(); break;
       case 'import-backup': $('#backup-in').click(); break;
       case 'wipe': wipeAll(); break;
-      case 'set-autodl': S.settings.autoDl = a.dataset.v; saveSettings(); render(); ensureOffline(); break;
+      case 'set-autodl': S.settings.autoDl = a.dataset.v; saveSettings(); render(); if (a.dataset.v === 'all') toast(canStream() ? 'Descargando tu música de Drive en este móvil…' : 'Se descargará al sincronizar con Drive.'); ensureOffline(); break;
       case 'convert-all': convertAll(); break;
       case 'gd-save-client': { const v = ($('#gd-client')?.value || '').trim(); if (!/\.apps\.googleusercontent\.com$/.test(v)){ toast('Ese no parece un ID de cliente: debe terminar en .apps.googleusercontent.com'); break; } S.settings.driveClientId = v; saveSettings(); render(); toast('ID guardado. Ahora pulsa «Conectar».'); break; }
       case 'gd-connect': { const f = ($('#gd-folder')?.value || '').trim(); if (f) S.settings.driveFolder = f.slice(0, 80); S.settings.driveOn = true; saveSettings(); syncDrive({ interactive: true, first: true }); render(); break; }
