@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Pletina</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="theme-color" content="#E2E5E9">
@@ -254,8 +254,8 @@ body.is-playing .eq i{animation:eq .8s ease-in-out infinite alternate}
 /* hojas */
 .sheet-wrap{position:fixed;inset:0;z-index:50}
 .sheet-backdrop{position:absolute;inset:0;background:var(--scrim);opacity:0;transition:opacity .22s}
-.sheet{position:absolute;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;max-height:88%;display:flex;flex-direction:column;background:var(--panel);border-radius:18px 18px 0 0;padding:6px var(--gr) calc(10px + env(safe-area-inset-bottom,0px)) var(--gl);transform:translateY(100%);transition:transform .26s cubic-bezier(.2,.8,.2,1);box-shadow:0 -12px 40px var(--shade)}
-.sheet-wrap.open .sheet{transform:none}
+.sheet{position:absolute;left:0;right:0;bottom:var(--kb,0px);max-width:560px;margin:0 auto;max-height:calc(100% - var(--kb,0px) - 32px);display:flex;flex-direction:column;background:var(--panel);border-radius:18px 18px 0 0;padding:6px var(--gr) calc(10px + env(safe-area-inset-bottom,0px)) var(--gl);transform:translateY(100%);transition:transform .26s cubic-bezier(.2,.8,.2,1);box-shadow:0 -12px 40px var(--shade)}
+.sheet-wrap.open .sheet{transform:none;transition:transform .26s cubic-bezier(.2,.8,.2,1),bottom .18s ease-out}
 .sheet-wrap.open .sheet-backdrop{opacity:1}
 .sheet-grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 12px;flex:0 0 auto}
 .sheet-title{margin:0 0 10px;font-size:18px}
@@ -3220,6 +3220,17 @@ async function recaptureFrames(list){
   }
   if (list.length){ render(); if (S.currentId) updateTrackUI(); }
 }
+/* ───────── teclado del móvil: que no tape las ventanitas ───────── */
+if (window.visualViewport){
+  const vv = window.visualViewport;
+  const updKb = () => { const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', (kb > 60 ? kb : 0) + 'px'); };
+  vv.addEventListener('resize', updKb); vv.addEventListener('scroll', updKb);
+}
+document.addEventListener('focusin', e => {
+  const el = e.target; if (!el.matches || !el.matches('input,textarea,select') || !el.closest('.sheet')) return;
+  setTimeout(() => { try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {} }, 320);
+});
+
 /* ───────── arranque ───────── */
 async function boot(){
   bindUI(); setupMS(); applyTheme(); applyLayout(); render();
